@@ -1,12 +1,11 @@
-
 import tensorflow as tf
 
 from trainer import Trainer
 from datasets import DatasetLoader
-from models import BasicClassifier
+from models import BasicClassifier, Classifier
+
 
 def main():
-
     dataset = DatasetLoader("cifar10")
 
     n_classes = len(dataset.class_names)
@@ -22,7 +21,7 @@ def main():
 
     dataset.prepare(data_aug)
 
-    classifier = BasicClassifier(n_classes, "Basic BasicClassifier")
+    classifier = Classifier(n_classes, "Deeper Classifier")
 
     trainer = Trainer(
         model=classifier,
@@ -43,7 +42,9 @@ def main():
         ),
     )
 
-    trainer.train(30)
+    num_epochs = 1000
+
+    trainer.train(num_epochs)
 
 
 if __name__ == '__main__':

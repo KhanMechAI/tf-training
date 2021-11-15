@@ -1,6 +1,6 @@
 import datetime
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Dict, Tuple, Union
 
 import tensorflow as tf
 
@@ -59,7 +59,7 @@ class Trainer:
         if training_out_path:
             self.base_path: Path = Path(training_out_path)
         else:
-            self.base_path = Path.cwd().parent / "training" / self.model.model_name
+            self.base_path = Path.cwd().parent / "training"
 
         current_time = datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
 
@@ -179,6 +179,36 @@ class Trainer:
 
         return loss, grads
 
+    def write_metric(self, writer: tf.summary.SummaryWriter, metric_dict: Dict[str, Union[float, int]], epoch: int):
+        with writer.as_default(step=epoch):
+            [tf.summary.scalar(f"{self.model.model_name}-{metric_desc}", metric_val) for metric_desc, metric_val in metric_dict.items()]
+
+    def training_loop(self, loss_metric, acc_metric, epoch):
+        for x, y in self.train_dataset:
+            self.train_step(x, y, loss_metric, acc_metric)
+
+            self.write_metric(
+                writer=self.train_summary_writer,
+                metric_dict=dict(
+                    loss=loss_metric.result(),
+                    accuracy=acc_metric.result() * 100
+                ),
+                epoch=epoch
+            )
+
+    def testing_loop(self, loss_metric, acc_metric, epoch):
+        for x, y in self.test_dataset:
+            self.test_step(x, y, loss_metric, acc_metric)
+
+            self.write_metric(
+                writer=self.test_summary_writer,
+                metric_dict=dict(
+                    loss=loss_metric.result(),
+                    accuracy=acc_metric.result() * 100
+                ),
+                epoch=epoch
+            )
+
     def train(self, n_epochs: int):
         for epoch in range(n_epochs):
             train_epoch_loss_avg = tf.keras.metrics.Mean()
@@ -186,19 +216,16 @@ class Trainer:
             test_epoch_loss_avg = tf.keras.metrics.Mean()
             test_epoch_accuracy = tf.keras.metrics.SparseCategoricalAccuracy()
 
-            for x, y in self.train_dataset:
-                self.train_step(x, y, train_epoch_loss_avg, train_epoch_accuracy)
-
-                with self.train_summary_writer.as_default(step=epoch):
-                    tf.summary.scalar("loss", train_epoch_loss_avg.result())
-                    tf.summary.scalar("accuracy", train_epoch_accuracy.result()*100)
-
-            for x, y in self.test_dataset:
-                self.test_step(x, y, test_epoch_loss_avg, test_epoch_accuracy)
-
-                with self.test_summary_writer.as_default(step=epoch):
-                    tf.summary.scalar("loss", test_epoch_loss_avg.result())
-                    tf.summary.scalar("accuracy", test_epoch_accuracy.result()*100)
+            self.training_loop(
+                loss_metric=train_epoch_loss_avg,
+                acc_metric=train_epoch_accuracy,
+                epoch=epoch
+            )
+            self.testing_loop(
+                loss_metric=test_epoch_loss_avg,
+                acc_metric=test_epoch_accuracy,
+                epoch=epoch
+            )
 
             train_epoch_loss_avg.reset_states()
             train_epoch_accuracy.reset_states()
